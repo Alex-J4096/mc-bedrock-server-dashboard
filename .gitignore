@@ -17,3 +17,5 @@ back/pkg/
 *.tmp
 
 go_build_mc_bedrock_server_dashboard_back.exe
+
+./idea/
