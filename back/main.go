@@ -3,11 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"log"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
+	"mc-bedrock-server-dashboard/back/server"
 )
 
 func main() {
@@ -16,39 +14,38 @@ func main() {
 	path := flag.String("path", ".", "path to the minecraft server executable directory")
 	flag.Parse()
 
-	absPath, err := filepath.Abs(*path)
+	cmd, stdout, stderr, err := server.StartServer(*path)
+	if err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+		return
+	}
+
+	defer func() {
+		// 在程序退出时关闭服务器进程
+		if cmd != nil && cmd.Process != nil {
+			fmt.Println("Stopping Minecraft server...")
+			if err := cmd.Process.Kill(); err != nil {
+				log.Println("Failed to kill server:", err)
+			} else {
+				cmd.Wait() // 等待进程结束
+				fmt.Println("Minecraft server stopped.")
+			}
+		}
+		if stdout != nil {
+			stdout.Close()
+		}
+		if stderr != nil {
+			stderr.Close()
+		}
+	}()
+
+	r := gin.Default()
+	r.GET("/", func(context *gin.Context) {
+		server.StreamLogs(context, stdout)
+	})
+	log.Println("已于localhost:8080上启动服务")
+	err = r.Run(":8080")
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	fmt.Println("path:", "Starting server at ", absPath)
-
-	// 根据当前的OS来决定启动命令
-	var cmd *exec.Cmd
-	// fmt.Println(runtime.GOOS)
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command(absPath + "\\bedrock_server.exe")
-	} else if runtime.GOOS == "linux" {
-
-	} else {
-		log.Fatal("Unsupported platform", runtime.GOOS)
-	}
-
-	cmd.Dir = absPath
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	err = cmd.Start()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println("Minecraft server started")
-
-	err = cmd.Wait()
-	if err != nil {
-		log.Fatal("Minecraft server exited with error: ", err)
-	}
-
-	fmt.Println("Minecraft server exited")
 }
